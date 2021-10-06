@@ -2,6 +2,8 @@ import _ from 'lodash';
 import Bluebird from 'bluebird';
 import {getWebviewStatusAddressBarHeight, parseSource, setHtmlElementAttributes} from './webview-helpers';
 import {SCREENSHOT_INTERACTION_MODE, APP_MODE} from '../components/Inspector/shared';
+import { DOMParser } from 'xmldom';
+import xpath from 'xpath';
 
 const NATIVE_APP = 'NATIVE_APP';
 let _instance = null;
@@ -211,7 +213,9 @@ export default class AppiumClient {
         const [width, height] = deviceScreenSize.split('x');
         windowSize = {width, height, x: 0, y: 0};
       } else {
-        windowSize = await this.driver.getWindowRect();
+        var kek = new DOMParser().parseFromString(parseSource(await this.driver.getPageSource()));
+        var node = xpath.select('//*', kek);
+        windowSize = {width: node[0].getAttribute('width'), height: node[0].getAttribute('height'), x: node[0].getAttribute('x'), y: node[0].getAttribute('y')};
       }
     } catch (e) {
       windowSizeError = e;
