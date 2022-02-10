@@ -3,13 +3,14 @@ import { getSetting, setSetting, SAVED_SESSIONS, SERVER_ARGS, SESSION_SERVER_TYP
 import { v4 as UUID } from 'uuid';
 import { push } from 'connected-react-router';
 import { notification } from 'antd';
-import { includes, debounce, toPairs, union, without, keys, isUndefined } from 'lodash';
+import { includes, debounce, toPairs, union, without, keys, isUndefined, isPlainObject } from 'lodash';
 import { setSessionDetails, quitSession } from './Inspector';
 import i18n from '../../configs/i18next.config.renderer';
 import CloudProviders from '../components/Session/CloudProviders';
 import { Web2Driver } from 'web2driver';
 import { addVendorPrefixes } from '../util';
 import ky from 'ky/umd';
+import moment from 'moment';
 
 export const NEW_SESSION_REQUESTED = 'NEW_SESSION_REQUESTED';
 export const NEW_SESSION_BEGAN = 'NEW_SESSION_BEGAN';
@@ -73,6 +74,9 @@ const AUTO_START_URL_PARAM = '1'; // what should be passed in to ?autoStart= to 
 // TODO: increase this retry when we get issues
 export const CONN_RETRIES = 0;
 
+// 1 hour default newCommandTimeout
+const NEW_COMMAND_TIMEOUT_SEC = 3600;
+
 let isFirstRun = true; // we only want to auto start a session on a first run
 
 const serverTypes = {};
@@ -87,6 +91,8 @@ export const ServerTypes = serverTypes;
 export const DEFAULT_SERVER_PATH = '/';
 export const DEFAULT_SERVER_HOST = '127.0.0.1';
 export const DEFAULT_SERVER_PORT = 4723;
+
+const SAUCE_OPTIONS_CAP = 'sauce:options';
 
 const JSON_TYPES = ['object', 'number', 'boolean'];
 
@@ -247,6 +253,13 @@ export function newSession (caps, attachSessId = null) {
           return;
         }
         https = false;
+        if (!isPlainObject(desiredCapabilities[SAUCE_OPTIONS_CAP])) {
+          desiredCapabilities[SAUCE_OPTIONS_CAP] = {};
+        }
+        if (!desiredCapabilities[SAUCE_OPTIONS_CAP].name) {
+          const dateTime = moment().format('lll');
+          desiredCapabilities[SAUCE_OPTIONS_CAP].name = `Appium Desktop Session -- ${dateTime}`;
+        }
         break;
       case ServerTypes.headspin: {
         let headspinUrl;
@@ -257,14 +270,15 @@ export function newSession (caps, attachSessId = null) {
           return;
         }
         host = session.server.headspin.hostname = headspinUrl.hostname;
-        port = session.server.headspin.port = headspinUrl.port;
         path = session.server.headspin.path = headspinUrl.pathname;
         https = session.server.headspin.ssl = headspinUrl.protocol === 'https:';
+        // new URL() does not have the port of 443 when `https` and 80 when `http`
+        port = session.server.headspin.port = headspinUrl.port === '' ? (https ? 443 : 80) : headspinUrl.port;
         break;
       }
       case ServerTypes.perfecto:
         host = session.server.perfecto.hostname;
-        port = session.server.perfecto.port || 80;
+        port = session.server.perfecto.port || (session.server.perfecto.ssl ? 443 : 80);
         token = session.server.perfecto.token || process.env.PERFECTO_TOKEN;
         path = session.server.perfecto.path = '/nexperience/perfectomobile/wd/hub';
         if (!token) {
@@ -275,8 +289,8 @@ export function newSession (caps, attachSessId = null) {
           });
           return;
         }
-        desiredCapabilities.securityToken = token;
-        https = session.server.perfecto.ssl = false;
+        desiredCapabilities['perfecto:options'] = {securityToken: token};
+        https = session.server.perfecto.ssl;
         break;
       case ServerTypes.browserstack:
         host = session.server.browserstack.hostname = process.env.BROWSERSTACK_HOST || 'hub-cloud.browserstack.com';
@@ -318,8 +332,9 @@ export function newSession (caps, attachSessId = null) {
         port = session.server.kobiton.port = 443;
         path = session.server.kobiton.path = '/wd/hub';
         username = session.server.kobiton.username || process.env.KOBITON_USERNAME;
-        desiredCapabilities['kobiton.source'] = 'appiumdesktop';
         accessKey = session.server.kobiton.accessKey || process.env.KOBITON_ACCESS_KEY;
+        desiredCapabilities['kobiton:options'] = {};
+        desiredCapabilities['kobiton:options'].source = 'appiumdesktop';
         if (!username || !accessKey) {
           notification.error({
             message: i18n.t('Error'),
@@ -386,8 +401,8 @@ export function newSession (caps, attachSessId = null) {
 
         host = session.server.experitest.hostname = experitestUrl.hostname;
         path = session.server.experitest.path = '/wd/hub';
-        port = session.server.experitest.port = experitestUrl.port;
         https = session.server.experitest.ssl = experitestUrl.protocol === 'https:';
+        port = session.server.experitest.port = experitestUrl.port === '' ? (https ? 443 : 80) : experitestUrl.port;
         break;
       } case ServerTypes.roboticmobi: {
         host = 'api.robotic.mobi';
@@ -433,9 +448,11 @@ export function newSession (caps, attachSessId = null) {
       serverOpts.key = accessKey;
     }
 
-    // If a newCommandTimeout wasn't provided, set it to 0 so that sessions don't close on users
+    // If a newCommandTimeout wasn't provided, set it to 60 * 60 so that sessions don't close on users in short term.
+    // I saw sometimes infinit session timeout was not so good for cloud providers.
+    // So, let me define this value as NEW_COMMAND_TIMEOUT_SEC by default.
     if (isUndefined(desiredCapabilities[CAPS_NEW_COMMAND])) {
-      desiredCapabilities[CAPS_NEW_COMMAND] = 0;
+      desiredCapabilities[CAPS_NEW_COMMAND] = NEW_COMMAND_TIMEOUT_SEC;
     }
 
     // If someone didn't specify connectHardwareKeyboard, set it to true by
@@ -447,6 +464,14 @@ export function newSession (caps, attachSessId = null) {
     let driver = null;
     try {
       if (attachSessId) {
+        // When attaching to a session id, webdriver does not check if the device
+        // is mobile or not. Since we're attaching in appium-inspector, we can
+        // assume the device is mobile so that Appium protocols are included
+        // in the userPrototype.
+        serverOpts.isMobile = true;
+        // Need to set connectionRetryTimeout as same as the new session request.
+        // TODO: make configurable?
+        serverOpts.connectionRetryTimeout = 120000;
         driver = await Web2Driver.attachToSession(attachSessId, serverOpts);
         driver._isAttachedSession = true;
       } else {
