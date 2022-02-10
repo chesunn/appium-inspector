@@ -59,11 +59,11 @@ export const SET_ADD_VENDOR_PREFIXES = 'SET_ADD_VENDOR_PREFIXES';
 export const SET_STATE_FROM_URL = 'SET_STATE_FROM_URL';
 
 
-const CAPS_NEW_COMMAND = 'appium:newCommandTimeout';
-const CAPS_CONNECT_HARDWARE_KEYBOARD = 'appium:connectHardwareKeyboard';
-const CAPS_NATIVE_WEB_SCREENSHOT = 'appium:nativeWebScreenshot';
-const CAPS_ENSURE_WEBVIEW_HAVE_PAGES = 'appium:ensureWebviewsHavePages';
-const CAPS_INCLUDE_SAFARI_IN_WEBVIEWS = 'appium:includeSafariInWebviews';
+const CAPS_NEW_COMMAND = 'newCommandTimeout';
+const CAPS_CONNECT_HARDWARE_KEYBOARD = 'connectHardwareKeyboard';
+const CAPS_NATIVE_WEB_SCREENSHOT = 'nativeWebScreenshot';
+const CAPS_ENSURE_WEBVIEW_HAVE_PAGES = 'ensureWebviewsHavePages';
+const CAPS_INCLUDE_SAFARI_IN_WEBVIEWS = 'includeSafariInWebviews';
 
 const AUTO_START_URL_PARAM = '1'; // what should be passed in to ?autoStart= to turn it on
 
@@ -195,8 +195,8 @@ export function removeCapability (index) {
 
 function _addVendorPrefixes (caps, dispatch, getState) {
   const prefixedCaps = addVendorPrefixes(caps);
-  setCaps(prefixedCaps, getState().session.capsUUID)(dispatch);
-  return prefixedCaps;
+  setCaps(caps, getState().session.capsUUID)(dispatch);
+  return caps;
 }
 
 /**
@@ -208,7 +208,7 @@ export function newSession (caps, attachSessId = null) {
 
     // first add vendor prefixes to caps if requested
     if (!attachSessId && session.addVendorPrefixes) {
-      caps = _addVendorPrefixes(caps, dispatch, getState);
+      caps = caps;
     }
 
     dispatch({type: NEW_SESSION_REQUESTED, caps});
