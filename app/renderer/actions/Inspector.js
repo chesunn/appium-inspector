@@ -530,7 +530,7 @@ export function runKeepAliveLoop () {
       const {lastActiveMoment} = getState().inspector;
       console.log('Pinging Appium server to keep session active'); // eslint-disable-line no-console
       try {
-        await driver.getTimeouts(); // Pings the Appium server to keep it alive
+        await driver.getState(); // Pings the Appium server to keep it alive
       } catch (ign) {}
       const now = Date.now();
 

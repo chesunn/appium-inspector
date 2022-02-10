@@ -36,7 +36,7 @@ const ButtonGroup = Button.Group;
 
 const MIN_WIDTH = 1080;
 const MIN_HEIGHT = 570;
-const MAX_SCREENSHOT_WIDTH = 500;
+const MAX_SCREENSHOT_WIDTH = 900;
 
 export default class Inspector extends Component {
 
@@ -64,6 +64,7 @@ export default class Inspector extends Component {
     if (!img) {
       return;
     }
+    const newMAX_SCREENSHOT_WIDTH = this.screenAndSourceEl.getBoundingClientRect().width;
 
     const imgRect = img.getBoundingClientRect();
     const screenshotRect = screenshotBox.getBoundingClientRect();
@@ -73,8 +74,8 @@ export default class Inspector extends Component {
     } else if (imgRect.height < screenshotRect.height) {
       // get what the img width would be if it fills screenshot box height
       const attemptedWidth = (screenshotRect.height / imgRect.height) * imgRect.width;
-      screenshotBox.style.maxWidth = attemptedWidth > MAX_SCREENSHOT_WIDTH ?
-        `${MAX_SCREENSHOT_WIDTH}px` :
+      screenshotBox.style.maxWidth = attemptedWidth > newMAX_SCREENSHOT_WIDTH ?
+        `${newMAX_SCREENSHOT_WIDTH}px` :
         `${attemptedWidth}px`;
     }
   }
